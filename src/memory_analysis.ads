@@ -13,7 +13,7 @@ is
 
    type Memory_Type is array (Address_Type) of Byte_Property with Ghost;
 
-   Memory : Memory_Type with Ghost;
+   Memory : Memory_Type := (others => (Stack => False, Heap => False, Scrubbed => False)) with Ghost;
 
    procedure Set_Heap (From, To : Address_Type)
      with

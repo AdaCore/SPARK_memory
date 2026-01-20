@@ -336,7 +336,11 @@ is
 
           and then
 
-            (if End_It1 and not End_It2 then S2.Areas (It2).From >= Result.Areas (Result.Size).From);
+            (if End_It1 and not End_It2 then S2.Areas (It2).From >= Result.Areas (Result.Size).From)
+
+          and then
+
+            (if not End_It1 then It1 = It1'Old + 1);
 
       procedure Combine_And_Increment (S1, S2 : Set; It1 : in out Integer; It2 : Integer; End_It1 : out Boolean; End_It2 : Boolean) is
       begin
@@ -443,6 +447,7 @@ is
          pragma Loop_Invariant (not End_It1 and then not End_It2);
          pragma Loop_Invariant (Has_Result_Space_Left (S1, S2, It1, It2, 2));
          pragma Loop_Invariant (Result.Size <= Result.Max);  -- BUG? Do I really need this invariant while it's an actual type predicate?
+         pragma Loop_Variant (Decreases => (S1.Size - It1) + (S2.Size - It2));
 
          if S1.Areas (It1).From <= S2.Areas (It2).From then
             Combine_And_Increment (S1, S2, It1, It2, End_It1, End_It2);
@@ -461,6 +466,7 @@ is
             pragma Loop_Invariant (if Result.Size > 0 then S1.Areas (It1).From >= Result.Areas (Result.Size).From);
             pragma Loop_Invariant (if S1.Areas (It1).From > Address_Type'First then Is_Computed (S1, S2, S1.Areas (It1).From - 1));
             pragma Loop_Invariant (Has_Result_Space_Left (S1, S2, It1, It2, 1));
+            pragma Loop_Variant (Decreases => S1.Size - It1);
 
             Combine_And_Increment (S1, S2, It1, It2, End_It1, End_It2);
             exit when End_It1;
@@ -474,6 +480,7 @@ is
             pragma Loop_Invariant (if Result.Size > 0 then S2.Areas (It2).From >= Result.Areas (Result.Size).From);
             pragma Loop_Invariant (if S2.Areas (It2).From > Address_Type'First then Is_Computed (S1, S2, S2.Areas (It2).From - 1));
             pragma Loop_Invariant (Has_Result_Space_Left (S1, S2, It1, It2, 1));
+            pragma Loop_Variant (Decreases => S2.Size - It2);
 
             Combine_And_Increment (S2, S1, It2, It1, End_It2, End_It1);
             exit when End_It2;
@@ -510,7 +517,8 @@ is
       with Ghost;
 
       procedure Combine (S1, S2 : Set; It1 : Integer; It2 : in out Integer)
-        with Pre =>
+        with Always_Terminates,
+        Pre =>
           -- Silver
         It1 in 1 .. S1.Size
         and then It2 in 1 .. S2.Size
@@ -536,6 +544,7 @@ is
 
         Post =>
           Result.Size >= Result.Size'Old
+          and then It2 >= It2'Old
           and then Result.Size - Result.Size'Old in It2 - It2'Old .. It2 - It2'Old + 1
           and then It2 in 1 .. S2.Size
           and then Is_Consistent (Result)
@@ -584,6 +593,7 @@ is
             pragma Loop_Invariant (It2 <= S2.Size);
             pragma Loop_Invariant (Result.Size - Result.Size'Loop_Entry = It2 - It2'Loop_Entry);
             pragma Loop_Invariant (It2 in It2'Loop_Entry .. It2'Loop_Entry + (Result.Size - Result.Size'Loop_Entry));
+            pragma Loop_Variant (Decreases => S2.Size - It2);
 
             -- Gold
             pragma Loop_Invariant (Result.Size = 0 or else S2.Areas (It2).From > Address_Type'First);
@@ -673,6 +683,8 @@ is
 
                if It2 > 1 then
                   Lemma_Nothing_In_Between (S2, It2 - 1);
+                  pragma Assert (for all B in S2.Areas (It2 - 1).To + 1 .. S2.Areas (It2).From - 1 => not Includes (B, S2));
+                  pragma Assert (for all B in S2.Areas (It2 - 1).To + 1 .. S1.Areas (It1).To => not Includes (B, S2));
                   pragma Assert (Is_Computed (S1.Areas (It1).To));
                else
                   pragma Assert (Is_Computed (S1.Areas (It1).To));
@@ -714,6 +726,7 @@ is
          pragma Loop_Invariant (It2 in 1 .. S2.Size);
          pragma Loop_Invariant (Natural'Last - Result.Size >= (S1.Size - It1) + (S2.Size - It2));
          pragma Loop_Invariant (Result.Max - Result.Size > (S1.Size - It1) + (S2.Size - It2));
+         pragma Loop_Variant (Decreases => (S1.Size - It1) + (S2.Size - It2));
 
          -- Gold
          pragma Loop_Invariant (Is_Consistent (S1));
@@ -891,6 +904,9 @@ is
          pragma Assert (for all B in Result.Areas (Result.Size).To + 1 .. S.Areas (I + 1).To => Includes (B, S));
 
          pragma Assert (for all B in Result.Areas (Result.Size).From.. S.Areas (I + 1).To => Includes (B, Result) /= Includes (B, S));
+
+         -- The previous part of the invariant is preserved since Result only got a new area beyond the previous range
+         pragma Assert (for all B in 0 .. S.Areas (I).To => Includes (B, Result) /= Includes (B, S));
 
          -- Silver, no RTE
          pragma Loop_Invariant (Result.Size <= I + 1);
