@@ -644,7 +644,7 @@ is
                   pragma Assert (for all B in S2.Areas (It2).From .. S2.Areas (It2).To => Includes (B, S2));
                   pragma Assert (for all B in S2.Areas (It2).From .. S2.Areas (It2).To => Includes (B, S1));
                   pragma Assert (Is_Computed (S2.Areas (It2).From, S2.Areas (It2).To));
-
+                  -- Combine: everything up to From-1 is computed (from line 641/645) + range From..To => up to To
                   pragma Assert (Is_Computed (S2.Areas (It2).To));
 
                   if It2 = S2.Size then
@@ -654,6 +654,13 @@ is
                      end if;
 
                      pragma Assert (Is_Computed (S1.Areas (It1).To));
+                     -- Establish postcondition: from Is_Computed(S2.Areas(It2).To) and Is_Consistent,
+                     -- we get Is_Computed(S2.Areas(It2-1).To) since It2-1 area ends before It2 area
+                     if It2 > 1 then
+                        pragma Assert (Is_Computed (S2.Areas (It2).To));
+                        pragma Assert (S2.Areas (It2 - 1).To < S2.Areas (It2).To);
+                        pragma Assert (Is_Computed (S2.Areas (It2 - 1).To));
+                     end if;
                      exit;
                   end if;
 
@@ -673,7 +680,7 @@ is
                   pragma Assert (Is_Computed (S1.Areas (It1).To));
 
                   pragma Assert (It1 = S1.Size or else S1.Areas (It1 + 1).From > S2.Areas (It2).From);
-
+                  -- The loop invariant at line 616 directly establishes the postcondition since It2 is unchanged
                   exit;
                end if;
             else
@@ -691,7 +698,7 @@ is
                end if;
 
                pragma Assert (if Result.Size > 0 and then It2 > 1 then Result.Areas (Result.Size).To <= S2.Areas (It2 - 1).To);
-
+               -- The loop invariant at line 616 directly establishes the postcondition since It2 is unchanged
                exit;
             end if;
 

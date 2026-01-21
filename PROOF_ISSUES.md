@@ -7,7 +7,7 @@ This document records issues found while verifying the SPARK memory operations c
 - **SPARK Pro Version**: 27.0w (20260119)
 - **Provers**: Alt-Ergo 2.6.1, CVC5 1.3.2, Z3 4.15.4
 - **Proof Level**: 2
-- **Timeout Required**: 240 seconds for full proof
+- **Timeout Required**: 120 seconds for full proof
 
 ## Issues Found and Fixed
 
@@ -100,13 +100,27 @@ if It2 > 1 then
 
 **File**: `src/area_math.adb`, around line 686
 
-### 6. Additional Helper Assertions for "and" Function Combine
+### 6. Additional Helper Assertions for "and" Function Combine Postcondition
 
-**Original Issue**: The postcondition `Is_Computed (S1, S2, S2.Areas (It2 - 1).To)` in the `Combine` procedure of the `"and"` function requires significant prover effort (level 4, 300s timeout).
+**Original Issue**: The postcondition `Is_Computed (S1, S2, S2.Areas (It2 - 1).To)` in the `Combine` procedure of the `"and"` function (line 556) previously required level 4 with 600s timeout.
 
-**Current Status**: This proof requires level 4 with extended timeout. Future work could add intermediate assertions to reduce the proof complexity.
+**Root Cause**: The prover needed help understanding the monotonicity of `Is_Computed` - that if we've computed up to `S2.Areas(It2).To`, we've also computed up to `S2.Areas(It2-1).To` since the It2-1 area ends before the It2 area.
 
-**File**: `src/area_math.adb`, line 556
+**Fix**: Added intermediate assertions at each exit point in the Combine loop to establish the `Is_Computed` monotonicity:
+
+```ada
+-- At line 659-663 (inside the "It2 = S2.Size" exit):
+if It2 > 1 then
+   pragma Assert (Is_Computed (S2.Areas (It2).To));
+   pragma Assert (S2.Areas (It2 - 1).To < S2.Areas (It2).To);
+   pragma Assert (Is_Computed (S2.Areas (It2 - 1).To));
+end if;
+exit;
+```
+
+**Result**: Proof now completes in under 1 second at level 2, down from 291 seconds at level 4.
+
+**File**: `src/area_math.adb`, lines 659-663
 
 ### 7. Loop Invariant Preservation in "not" Function
 
@@ -120,7 +134,7 @@ pragma Assert (for all B in 0 .. S.Areas (I).To => Includes (B, Result) /= Inclu
 
 **File**: `src/area_math.adb`, line 909
 
-### 7. Uninitialized Ghost Memory Variable
+### 8. Uninitialized Ghost Memory Variable
 
 **Original Issue**: The `Memory` ghost variable in `Memory_Analysis` was not initialized, causing:
 ```
@@ -149,20 +163,14 @@ These are ghost variables initialized for documentation purposes that the prover
 To verify all proofs pass:
 
 ```bash
-gnatprove -P prj.gpr --level=4 --timeout=600 -j0
-```
-
-**Note**: Some complex proofs in the `"and"` operator's `Combine` procedure require level 4 and up to 600 seconds. The proof at line 556 in `area_math.adb` is particularly demanding.
-
-For faster iteration during development, you can run at level 2 with 120s timeout. Most proofs will pass, with only one requiring the extended settings:
-
-```bash
 gnatprove -P prj.gpr --level=2 --timeout=120 -j0
 ```
 
+All 1155 checks prove successfully with no individual check taking more than 1 second.
+
 ## Summary
 
-All 1146 checks prove successfully with SPARK Pro 27.0w at proof level 4 with a 600-second timeout.
+All 1155 checks prove successfully with SPARK Pro 27.0w at proof level 2 with a 120-second timeout. No individual check takes more than 1 second.
 
 Only two benign warnings remain:
 - `initialization of "Old_Memory" has no effect` - ghost variable in memory_analysis.adb
